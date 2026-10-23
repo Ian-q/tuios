@@ -8681,3 +8681,16 @@ the dialog.
 |---|---|---|---|---|
 | The kill's own "Killed session" note replaced the deletion note — the one record of where the stashed changes went — and made `TestSidebarCloseDeletesWorktree` flake at the already-gone and dirty steps | The `pendingWorktreeKill` suppression in `update.go` | Build with the suppression short-circuited | `TestSidebarCloseDeletesWorktree` ("the kill's own note replaced the deletion note"), deterministically on all three deletions | **caught** |
 | remove-worktree deleted a worktree whose detached HEAD held commits no branch has, without a word — the removal leaves those commits unreachable | The `OwnCommits` refusal in the verb, and the dialog's refusal line and toll | Build from before the fix | `TestSidebarCloseRefusesDetachedWorktree` ("the close dialog said nothing about the detached HEAD") | **caught** |
+
+## A pane's command without -s uses the pane's session
+
+`TestAPaneCallWithoutSessionUsesThePaneSession` runs a probe pane in session
+`home` while session `other` is the most recent one. Both hold a window `x`.
+The probe unsets `TUIOS_SESSION` and calls `capture-pane`, `list-windows` and
+`send-text` with no `-s`. The positive half is the person's capture from
+outside every pane, which must read `other`'s `x`. Run on 2026-10-24 against a
+build of origin/main (c5e6439de).
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A pane's call without `-s` acted on the most recently active session, not its own | The `callerSession` step in `findTargetSession` | Build of origin/main | `TestAPaneCallWithoutSessionUsesThePaneSession` (the capture reads `OTHER_MARK`, the listing is `other`'s, and the text never reaches `home`'s `x`) | **caught** |
