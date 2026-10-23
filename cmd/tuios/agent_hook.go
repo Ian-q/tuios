@@ -123,10 +123,11 @@ A report that ends a turn (done or errored) also sends what the pane's status
 line feed (tuios agent-statusline) held back, with set-agent-meta for the same
 pane, so the turn's last context and cost reach the rail.
 
-For claude-code and codex, a SessionStart prints two lines that these
+For claude-code and codex, a SessionStart prints four lines that these
 harnesses add to the agent's context: the pane and the session the agent runs
-in, and "Run tuios --skill to learn how to drive tuios". Outside tuios, and
-with --window, it prints nothing.
+in, the commands that reach the other agents and the person, the safety rule,
+and "Run tuios --skill for everything else". Outside tuios, and with
+--window, it prints nothing.
 
 It always exits 0, prints nothing a harness would read as an answer (Gemini
 CLI gets an empty JSON object), and gives up after 500ms when the daemon is
