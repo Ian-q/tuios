@@ -8695,3 +8695,20 @@ Upstream main fails both cases two runs of two, with the pane at `none`, source 
 `TestAgentSignalsOnAnExitedAgentsPane` read the kept harness as its precondition ("want none still attributed to claude-code"), and failed its four exit cases (`hook-exit`, `osc-tier-exit-bar`, `osc-tier-exit-title`, `restart-after-exit`) on the fixed build until that check read `none` with no harness. With the harness gone, its exit cases no longer reach the `agentInPane` gate: the control "`agentHarnessOf` returns the remembered harness whatever `agentInPane` says" (from "Agent signals on an exited agent's pane") passes all six cases on the fixed build, run once on 2026-10-23. The gate stays for a pane carried at `none` with a harness from a daemon without this fix.
 
 Not covered: a pane carried at `none` with a harness from a daemon without the fix, which keeps its row until a `none` report or the detector clears it (`tuios set-agent-state none -w <pane>` does).
+## Typing from a pane: -w required, and no typing into a prompt
+
+`TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` runs a probe pane that holds
+admin and respond. It calls `send-text` and `send-keys` with no `-w`, and
+`send-text`, `send-keys` and `paste-buffer` into a pane on `needs_input`
+without `--allow-blocked`. The
+positive halves are in the same fixture: the same call with `-w` reaches a
+plain pane, `send-text --allow-blocked` reaches the waiting pane, and the
+person's `send-text`, from outside every pane, reaches it too.
+`TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` now checks that a pane with
+respond is refused without `--allow-blocked` and answers the prompt with it.
+Run on 2026-10-24 against a build of origin/main (c5e6439de).
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A pane's `send-text` and `send-keys` without `-w` typed into the person's focused pane | `typingNeedsWindow` | Build of origin/main | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` ("a call without -w typed into the focused pane": `NOWIN_TEXTNOWIN` in the plain pane) | **caught** |
+| A pane with respond typed into a pane on needs_input with no sign it read the prompt | `typingBlocked` | Build of origin/main | `TestAPaneTypesOnlyWhereItAimsAndNotIntoAPrompt` (`REFUSED_TEXT`, `QZ` and `BUFFER_TEXT` in the waiting pane's log), `TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt` (`SK3_EXIT=0`, `ANSWERED:y`) | **caught** |
