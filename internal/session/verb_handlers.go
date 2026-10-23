@@ -1198,6 +1198,12 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	if p.Trim {
 		content = trimCapture(content)
 	}
+	// Counted before the cut, so the caller can tell a capture that lines
+	// shortened from one that held everything.
+	omitted := -1
+	if p.Lines > 0 && p.Start <= 0 && p.End <= 0 {
+		omitted = max(captureLineCount(content)-p.Lines, 0)
+	}
 	content = sliceCaptureLines(content, p.Start, p.End, p.Lines)
 
 	source := p.Source
@@ -1224,6 +1230,9 @@ func (d *Daemon) verbCapturePane(_ *connState, params json.RawMessage) (any, *ve
 	}
 	if p.Trim {
 		out["trimmed"] = true
+	}
+	if omitted >= 0 {
+		out["lines_omitted"] = omitted
 	}
 	// A revision counts from 0 again when the daemon restarts, so it is a
 	// cache key only beside the daemon start it came from.
@@ -2339,6 +2348,17 @@ func (d *Daemon) verbExplainAgentScreen(_ *connState, params json.RawMessage) (a
 	out["title_matched"] = titleRule >= 0
 	out["title_rule_state"] = titleState
 	return out, nil
+}
+
+// captureLineCount is how many lines lines can choose from in content: the
+// rows up to the last one that is not blank, as sliceCaptureLines counts them.
+func captureLineCount(content string) int {
+	split := strings.Split(strings.TrimSuffix(content, "\n"), "\n")
+	n := len(split)
+	for n > 0 && strings.TrimSpace(split[n-1]) == "" {
+		n--
+	}
+	return n
 }
 
 // sliceCaptureLines applies the optional region/lines selection to captured

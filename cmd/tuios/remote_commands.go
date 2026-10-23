@@ -789,7 +789,16 @@ type captureOptions struct {
 	lines                      int
 	lastCommand, unwrap, trim  bool
 	jsonOut                    bool
+	// capped is true when lines is the default cap rather than the caller's
+	// own --lines.
+	capped bool
 }
+
+// captureScrollbackCap is how many lines capture-pane --scrollback keeps when
+// no --lines is given. A full history is 10,000 lines or more, which floods
+// an agent's context. The cap lives here and not in the verb: the tmux shim,
+// the MCP server and the web client call capture-pane for the whole history.
+const captureScrollbackCap = 2000
 
 func runCapturePane(o captureOptions) error {
 	t, err := dialTarget(o.session, o.window)
@@ -835,10 +844,37 @@ func runCapturePane(o captureOptions) error {
 	if json.Unmarshal(raw, &echo) == nil && ((o.unwrap && !echo.Unwrapped) || (o.trim && !echo.Trimmed)) {
 		fmt.Fprintln(os.Stderr, "warning: "+errStaleCapture.Error()+".")
 	}
+	if o.capped && !o.jsonOut {
+		if note := captureCapNote(raw); note != "" {
+			fmt.Fprintln(os.Stderr, note)
+		}
+	}
 	if o.jsonOut {
 		return printVerbResultOn(t, raw, o.jsonOut)
 	}
 	return printCapture(os.Stdout, raw, t.host, t.window, o.ansi || o.resolved)
+}
+
+// captureCapNote is the stderr line for a scrollback capture the default cap
+// shortened, or "" when it kept every line. A daemon from before
+// lines_omitted does not say how many lines it left out, so a capture of
+// exactly the cap is reported without a count.
+func captureCapNote(raw json.RawMessage) string {
+	var res struct {
+		Content      string `json:"content"`
+		LinesOmitted *int   `json:"lines_omitted"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return ""
+	}
+	const tail = " To get the whole history, use --lines 0."
+	switch {
+	case res.LinesOmitted != nil && *res.LinesOmitted > 0:
+		return fmt.Sprintf("note: capture-pane shows the last %d lines. It left out %d older lines.", captureScrollbackCap, *res.LinesOmitted) + tail
+	case res.LinesOmitted == nil && strings.Count(strings.TrimSuffix(res.Content, "\n"), "\n")+1 >= captureScrollbackCap:
+		return fmt.Sprintf("note: capture-pane shows the last %d lines. Older lines can be left out.", captureScrollbackCap) + tail
+	}
+	return ""
 }
 
 // errStaleCapture is what capture-pane says when the daemon does not know

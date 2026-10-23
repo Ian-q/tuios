@@ -640,9 +640,12 @@ it matched.`,
 		Long: `Capture the visible content (or scrollback history) of a terminal pane.
 
 Output is written to stdout. By default captures the focused window's visible screen.
-Use --scrollback to include the full scrollback history.
+Use --scrollback to include the scrollback history. It keeps the last 2000
+lines unless you give --lines. A note on stderr says how many older lines
+it left out.
 Use --lines to keep only the last N lines, which is how you read the tail of a
-long scrollback without pulling all of it.
+long scrollback without pulling all of it. Use --lines 0 to get the whole
+history.
 Use --ansi to preserve ANSI escape codes (colors, styles).
 Use --resolved to rewrite ANSI index colours to 24-bit RGB, optionally against
 --palette (16 hex colours of your theme, xterm defaults otherwise).
@@ -673,8 +676,8 @@ kept from it. With --json the result carries host and "untrusted": true.`,
   # Search the whole log for a long line that wrapped in the pane
   tuios capture-pane -w build --scrollback --unwrap --trim | grep 'FAIL'
 
-  # Pipe to a file
-  tuios capture-pane -w editor --scrollback > pane.txt
+  # Pipe the whole history to a file
+  tuios capture-pane -w editor --scrollback --lines 0 > pane.txt
 
   # What the last command in the build pane printed, and nothing else
   tuios capture-pane -w build --last-command
@@ -682,7 +685,15 @@ kept from it. With --json the result carries host and "untrusted": true.`,
   # Read pane 0 of session api on host build, as JSON
   tuios capture-pane -w build:api:0 --json`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// A scrollback capture with no --lines keeps the last
+			// captureScrollbackCap lines. An explicit --lines, 0 included,
+			// is passed as given.
+			capped := capturePaneScrollback && !capturePaneLastCommand && !cmd.Flags().Changed("lines")
+			if capped {
+				capturePaneLines = captureScrollbackCap
+			}
 			return runCapturePane(captureOptions{
+				capped:  capped,
 				session: capturePaneSession, window: capturePaneWindow,
 				scrollback: capturePaneScrollback, ansi: capturePaneANSI, resolved: capturePaneResolved,
 				palette: capturePanePalette, lines: capturePaneLines, lastCommand: capturePaneLastCommand,
@@ -693,11 +704,11 @@ kept from it. With --json the result carries host and "untrusted": true.`,
 	capturePaneCmd.Flags().BoolVar(&capturePaneLastCommand, "last-command", false, "Capture only what the last finished command printed (needs OSC 133 shell integration)")
 	capturePaneCmd.Flags().StringVarP(&capturePaneSession, "session", "s", "", "Target session")
 	capturePaneCmd.Flags().StringVarP(&capturePaneWindow, "window", "w", "", "Target window by name or ID")
-	capturePaneCmd.Flags().BoolVarP(&capturePaneScrollback, "scrollback", "S", false, "Include full scrollback history")
+	capturePaneCmd.Flags().BoolVarP(&capturePaneScrollback, "scrollback", "S", false, "Include the scrollback history, the last 2000 lines unless --lines is given")
 	capturePaneCmd.Flags().BoolVar(&capturePaneANSI, "ansi", false, "Preserve ANSI escape codes")
 	capturePaneCmd.Flags().BoolVar(&capturePaneResolved, "resolved", false, "Rewrite ANSI index colours to 24-bit RGB")
 	capturePaneCmd.Flags().StringSliceVar(&capturePanePalette, "palette", nil, "16 hex colours (#rrggbb) to resolve against (default: xterm)")
-	capturePaneCmd.Flags().IntVar(&capturePaneLines, "lines", 0, "Keep only the last N lines (0 keeps all)")
+	capturePaneCmd.Flags().IntVar(&capturePaneLines, "lines", 0, "Keep only the last N lines. 0 keeps all. With --scrollback the default is 2000")
 	capturePaneCmd.Flags().BoolVar(&capturePaneUnwrap, "unwrap", false, "Join the rows that the pane wrapped, so each line is one line")
 	capturePaneCmd.Flags().BoolVar(&capturePaneTrim, "trim", false, "Drop the blank lines at the end")
 	capturePaneCmd.Flags().BoolVar(&capturePaneJSON, "json", false, "Output result as JSON")

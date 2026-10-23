@@ -3631,8 +3631,8 @@ tuios capture-pane [flags]
 **Flags:**
 - `-s, --session <name>`: Target session (default: most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused)
-- `-S, --scrollback`: Include the full scrollback history
-- `--lines <N>`: Keep only the last N lines (0 keeps all)
+- `-S, --scrollback`: Include the scrollback history. Without `--lines`, the capture keeps the last 2000 lines
+- `--lines <N>`: Keep only the last N lines. `0` keeps all. With `--scrollback` the default is 2000
 - `--ansi`: Preserve ANSI escape codes (colors, styles)
 - `--resolved`: Rewrite ANSI index colours (31, 91, 38;5;n, ...) to 24-bit
   RGB, so a capture matches what a themed client paints. Indices below 16 come
@@ -3661,13 +3661,23 @@ is for consumers that render the capture verbatim, and implies `--ansi`.
 the cursor do not count. This is how you read the tail of a long scrollback
 without pulling all of it.
 
+A history holds 10,000 lines or more, which is too much for an agent to read.
+So `--scrollback` without `--lines` keeps the last 2000 lines. When it leaves
+lines out, a note on stderr says how many. With `--json`, `lines_omitted`
+gives the count. Use `--lines 0` to get the whole history. The `capture-pane`
+verb itself has no cap, so the tmux shim and the MCP server get the whole
+history as before.
+
 **Examples:**
 ```bash
 # Capture the focused window's visible screen
 tuios capture-pane
 
-# Capture a specific window with its scrollback
+# Capture a specific window with the last 2000 lines of its scrollback
 tuios capture-pane -w build --scrollback
+
+# Capture the whole scrollback
+tuios capture-pane -w build --scrollback --lines 0
 
 # Read the last 40 lines a build printed
 tuios capture-pane -w build --scrollback --lines 40

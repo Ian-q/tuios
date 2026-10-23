@@ -1585,6 +1585,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "content", Type: "string", Description: "The captured text, one line per row, or per line with unwrap."},
 				{Name: "unwrapped", Type: "bool", Description: "True when unwrap joined the wrapped rows. Omitted otherwise."},
 				{Name: "trimmed", Type: "bool", Description: "True when trim dropped the blank lines at the end. Omitted otherwise."},
+				{Name: "lines_omitted", Type: "int", Description: "With lines: how many older lines the capture left out, 0 when it kept them all. Omitted without lines, and with start or end."},
 				{Name: "source", Type: "string", Description: "The buffer captured.", Accepted: captureSources},
 				{Name: "styled", Type: "bool", Description: "Whether content carries ANSI styling."},
 				{Name: "resolved", Type: "bool", Description: "Whether index colours were rewritten to 24-bit RGB."},

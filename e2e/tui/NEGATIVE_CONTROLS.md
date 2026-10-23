@@ -8708,3 +8708,23 @@ With the fix both cases pass three runs of three; the trace of `blocker-released
 | `yieldAgentClaim` keeps a claim only for `auto`, and deletes one that carries only `sawProcess` | `screen-idle-yielded-on-exit`, three runs of three ("the pane kept agent state idle (source report, harness ) with the agent gone and its shell in the foreground") | **caught** |
 
 Not covered: `yieldAgentClaim` carrying `sawProcess` on an `auto` claim. The detector clears a claim it owns when the agent leaves whether or not the mark is set, so the mark on such a claim has no reader, and the change only keeps it for a later hand-over.
+## capture-pane --scrollback keeps 2000 lines
+
+`TestCaptureScrollbackCapsAtTwoThousandLines` prints 2500 numbered lines in a
+pane. The positive half: `--lines 0` gives every line and no note. The capped
+half: `--scrollback` with no `--lines` keeps 2000 lines, holds the last line
+and not the first, and prints a note on stderr with the count it left out.
+With `--json`, `lines_omitted` equals the whole history minus 2000. `--lines
+50` gives 50 lines and no note.
+
+Run on 2026-10-24 on Linux amd64, two runs of each binary.
+
+| Control | How | Result | Verdict |
+| --- | --- | --- | --- |
+| origin/main | binary built from origin/main | 2 runs of 2 fail: "CAP1 present=true, CAP2500 present=true, 2502 lines" | **caught** |
+| no default cap | `capped := false && ...` in the capture-pane command, restored after, checked with sha256 | 2 runs of 2 fail with the same message | **caught** |
+
+With the change in place the test passes, and so does
+`TestScrollbackResizeCaptureCountsMatch`, which captures with `--scrollback`.
+An origin/main daemon with the new CLI keeps 2000 lines and prints the note
+without a count, because that daemon does not send `lines_omitted`.
