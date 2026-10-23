@@ -300,6 +300,9 @@ type Daemon struct {
 	// queue holds the messages waiting to be typed to an agent when it comes
 	// to rest. Its zero value is ready. See agent_queue.go.
 	queue agentQueues
+	// askTurns keeps one ask-agent typing at a pane at a time. See
+	// ask_turns.go.
+	askTurns askTurns
 
 	// reviewNotes holds the review notes left on panes' changes. Its zero
 	// value is ready; Start loads what the last daemon saved. See
