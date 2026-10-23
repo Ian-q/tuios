@@ -8627,3 +8627,24 @@ Each control cuts one change from the fix, rebuilds, runs the test twice, and re
 ```sh
 go test -count=1 -run '^TestReadGateNeverReportsOutputAfterAFailedWait$' ./internal/session/
 ```
+
+## Mail notices in the hooks of Claude Code and Codex
+
+`TestHookTellsTheAgentAboutItsMailOnce` runs the real `tuios agent-hook` for
+two panes, found from `TUIOS_PANE_ID` as a harness in the pane finds them,
+while a third pane sends them mail. It counts every hook's output: the first
+message is announced once over one `UserPromptSubmit` and three `PostToolUse`
+events, a second message is announced once in `hookSpecificOutput` JSON, a
+compact `SessionStart` prints the hint and the notice again, a Codex pane gets
+the same, and a `SessionStart` after the mail was read prints no notice. No
+output may hold the subject's or the body's marker text. The positive half of
+each "nothing printed" check is the notice printed in the same fixture a step
+earlier. The artifact is `mail-notice-hooks.log`: each event and its output.
+
+Each control cuts one change, rebuilds, runs the test, and reverts the patch.
+Run on 2026-10-23 on Linux amd64 (Go 1.27.1).
+
+| Control | How | Test that fails | Verdict |
+| --- | --- | --- | --- |
+| The hook never asks for the notice | drop the `fetchMailNotice` call from `agentHook` | `UserPromptSubmit printed "", want "You have 1 unread tuios message from \"review\". ..."` | **caught** |
+| A message is announced again on every event | skip the announced-mark check in `takeNotice` | `the first message was announced 4 times, want once` | **caught** |
