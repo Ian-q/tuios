@@ -145,9 +145,9 @@ const (
 	// task cards of a session (task.go). Task carries the card's row as
 	// list-tasks gives it. On claimed and finished, Window is the pane that
 	// held the card. On changed, Action says what happened: added, staged,
-	// blocked, unblocked, released or removed, and Reason carries why a card
-	// was released without its holder asking (pane closed, agent left,
-	// restart).
+	// blocked, unblocked, released, touches or removed, and Reason carries
+	// why a card was released without its holder asking (pane closed, agent
+	// left, restart).
 	EventTaskClaimed  = "task-claimed"
 	EventTaskFinished = "task-finished"
 	EventTaskChanged  = "task-changed"

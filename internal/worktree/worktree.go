@@ -161,6 +161,34 @@ func Root(dir string) (string, error) {
 	return common, nil
 }
 
+// MainRoot is the main checkout of the repository dir is in, with symbolic
+// links resolved, read from the files without running git. A linked worktree
+// and its main checkout give the same answer, since both reach the one shared
+// git directory, so it names a repository whichever checkout asks. A bare
+// repository is its own directory, and a submodule its git directory under
+// the parent's modules. ok is false outside every repository.
+func MainRoot(dir string) (root string, ok bool) {
+	dir = filepath.Clean(dir)
+	if !filepath.IsAbs(dir) {
+		return "", false
+	}
+	if r := gitstate.Find(dir); r.JJ {
+		root = r.Main
+	} else if _, common, _, found := gitstate.Locate(dir); found {
+		root = common
+		if filepath.Base(common) == ".git" {
+			root = filepath.Dir(common)
+		}
+	}
+	if root == "" {
+		return "", false
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	return root, true
+}
+
 var slugStrip = lazyre.New(`[^A-Za-z0-9._]+`)
 
 // Slug turns a branch name into one path component and one session-name

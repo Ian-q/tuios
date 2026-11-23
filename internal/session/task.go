@@ -142,6 +142,12 @@ type TaskState struct {
 	// command on it. Both are only ever replaced, never changed in place.
 	Work   *TaskWork   `json:"work,omitempty"`
 	Verify *TaskVerify `json:"verify,omitempty"`
+	// Touches are the paths the card's work is expected to change, as
+	// patterns under Repo, the main checkout of the repository they are
+	// read in (task_touches.go). Both are set together, and only ever
+	// replaced.
+	Touches []string `json:"touches,omitempty"`
+	Repo    string   `json:"repo,omitempty"`
 	// Attachments are the files and links put on the card, in the order
 	// they were added (task_attach.go). A state push leaves them out.
 	Attachments []TaskAttachment `json:"attachments,omitempty"`

@@ -107,6 +107,52 @@ as the pane exists. Both check the card before they make anything: it must be
 held by no pane (`fan` also takes one your own pane holds), not blocked and
 not done.
 
+## Say what you touch, and check who else does
+
+A card can name the paths its work changes. Name them as soon as you know
+them, so another agent in the same repository hears that your cards meet
+before you both edit one file.
+
+```sh
+tuios task add --touches api/retry.go --touches api/retry_test.go split the retry loop
+tuios task touches t1 internal/session/ 'cmd/**/*.go'
+tuios task touches t1
+tuios task overlaps t1 --all-sessions
+tuios task overlaps --touches docs/ --all-sessions
+```
+
+| Pattern | Covers |
+| --- | --- |
+| `internal/session/` | A folder: everything under it. End a folder with `/` |
+| `docs/tasks.md` | The paths it matches, and no more |
+| `cmd/*/main.go` | `*` is any run of characters inside one segment |
+| `**/*_test.go` | A segment `**` is any number of segments, none included |
+
+A pattern is a path from the root of the repository. Quote a glob. `touches
+ID PATTERN...` puts the patterns in the place of the old ones, and you name
+them only for the card you hold; `touches ID --clear` takes them off.
+
+Run the command in the repository you work in. tuios compares only cards of
+the same repository, and a linked git worktree counts as its main checkout,
+so your worktree and another agent's are compared. `--repo DIR` names a
+repository you are not in. Outside every repository the touches are kept and
+compared with nothing, and the command says so.
+
+`tuios task overlaps` lists the open cards that meet a card or some paths,
+held or not: session, id, stage, holder, your pattern and theirs.
+`--all-sessions` reads every session on this machine: use it, because another
+agent in your repository is often in another session.
+
+Nothing is locked. `tuios task claim` takes a card that overlaps one another
+pane holds and prints a warning on standard error, naming that card, its
+holder and the patterns; `tuios task touches` warns the same way, and
+`--json` carries the same cards in `overlaps`. Without `admin` you are warned
+of cards in your own session only. When you get the warning,
+read the other card (`tuios task get ID -s SESSION`), then write to its
+holder or to the person before you change the shared paths. Two patterns
+overlap when one path is covered by both, worked out from the patterns alone:
+`a/` and `a/b.go` overlap, `a/*.go` and `a/*.md` do not.
+
 ## Attach proof to a card
 
 Put what shows the work on the card, so the person sees it on the board:
@@ -149,7 +195,7 @@ tuios subscribe -s "$TUIOS_SESSION" --types task-claimed,task-finished,task-chan
 
 Each event carries the card's row in `task`. `task-claimed` and `task-finished`
 carry the holder's pane in `window`. `task-changed` says what happened in
-`action`: `added`, `staged`, `verified`, `blocked`, `unblocked`, `released`, `attached`, `detached` or `removed`. A
+`action`: `added`, `staged`, `verified`, `blocked`, `unblocked`, `released`, `attached`, `detached`, `touches` or `removed`. A
 release or a stage move tuios made on its own carries the reason in `reason`.
 
 `--select 'task:t1'` names the pane that holds `t1`, whatever else it holds.

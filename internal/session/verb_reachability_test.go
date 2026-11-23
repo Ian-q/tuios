@@ -70,6 +70,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"release-task#0":        {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
 	"remove-task#0":         {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
 	"set-task-stage#0":      {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"set-task-touches#0":    {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"set-task-touches#1":    {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
+	"list-task-overlaps#0":  {errCode: ErrVerbNoTask, why: "the fixture's session holds no task card"},
 	// A client-owned surface with no client attached.
 	"list-dock-components#0": {errCode: ErrVerbNeedsClient, why: "the dock is drawn by a client"},
 	// The fixture daemon runs inside the test binary, with no tuios command

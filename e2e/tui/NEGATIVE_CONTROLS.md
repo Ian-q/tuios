@@ -18802,3 +18802,21 @@ Run on 2026-11-21 on Linux, real backend.
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestALayoutSavedThenLeftHoldsItsWorkspace$' .
 ```
+
+## What a task card touches
+
+`TestTaskTouchesWarnAcrossWorktreesAndSurviveARestart` adds a card from a repository's main checkout and one from a linked worktree of it, each in its own session, with touches that meet. `tuios task overlaps --all-sessions` must name the other card, a pane's claim of the second card must succeed with the warning on standard error alone, and after `restart-server` both cards must still name their touches and their repository. `TestCardPreviewShowsWhatACardTouches` reads the touches in the board's card preview.
+
+Run on 2026-11-22 on macOS (darwin/arm64), real backend. Each control is this change with one edit.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| `worktree.MainRoot` answers the checkout's own root | `TestTaskTouchesWarnAcrossWorktreesAndSurviveARestart` | "the card added in the main checkout reads repo .../repo and the one added in the linked worktree .../linked" | **caught** |
+| `claim-task` does not read the held overlaps | `TestTaskTouchesWarnAcrossWorktreesAndSurviveARestart` | "the claim's standard error does not name the other card, its session, its holder and the patterns" | **caught** |
+| A card's touches and repo left out of the saved state (`json:"-"`) | `TestTaskTouchesWarnAcrossWorktreesAndSurviveARestart` | "after the restart the cards read {... Touches:[] Repo: ...}" | **caught** |
+| `ckCardBody` does not draw the touches | `TestCardPreviewShowsWhatACardTouches` | the wait for "Touches internal/session/  docs/tasks.md" times out | **caught** |
+| This change | both | pass | |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^(TestTaskTouchesWarnAcrossWorktreesAndSurviveARestart|TestCardPreviewShowsWhatACardTouches)$' .
+```

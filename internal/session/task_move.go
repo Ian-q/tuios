@@ -10,8 +10,8 @@ import (
 
 // The task card lifecycle as one transition function. A card's lifecycle
 // fields (Stage, StageAt, Holder, HeldAt, HolderName, HolderHarness,
-// Dispatched, Blocked, Attempts, Note, Work, Verify and Attachments) are
-// written here and
+// Dispatched, Blocked, Attempts, Note, Work, Verify, Attachments, Touches
+// and Repo) are written here and
 // nowhere else: internal/lint TestOnlyTaskMoveWritesACardsLifecycle holds it.
 // A verb keeps its own checks (who may touch the card, the pane refusals, the
 // verify command rules) and asks for a move; Session.moveCard makes it,
@@ -56,6 +56,9 @@ const (
 	moveAttach
 	// moveDetach takes the attachment named reason off the card.
 	moveDetach
+	// moveTouches replaces the card's touches and the repository they are
+	// read in. No touches clears both.
+	moveTouches
 )
 
 // cardMove is one move and what it needs.
@@ -77,6 +80,8 @@ type cardMove struct {
 	verify            *TaskVerify
 	note              string           // BlockErrored, Verified: the card's note
 	attachments       []TaskAttachment // Attach
+	touches           []string         // Touches
+	repo              string           // Touches
 }
 
 // apply makes m on the card at now. It returns the action the history and
@@ -208,6 +213,17 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 		}
 		tk.Attachments = slices.Delete(slices.Clone(tk.Attachments), i, i+1)
 		action = TaskActionDetached
+
+	case moveTouches:
+		if len(m.touches) == 0 {
+			m.repo = ""
+		}
+		if slices.Equal(tk.Touches, m.touches) && tk.Repo == m.repo {
+			return "", holder, nil
+		}
+		// A new slice: a snapshot shares the old one.
+		tk.Touches, tk.Repo = slices.Clone(m.touches), m.repo
+		action = TaskActionTouches
 
 	default:
 		return "", holder, nil

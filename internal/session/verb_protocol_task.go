@@ -9,7 +9,7 @@ import (
 func taskVerbs() map[string]verbEntry {
 	id := verbParam{Name: "id", Type: "string", Required: true, Description: "The card, such as t1."}
 	humanNonce := verbParam{Name: "human_nonce", Type: "string", Description: "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."}
-	rowFields := "id, session, title, preview (the first line of the prompt, at most 80 characters), stage, stage_at (Unix nanoseconds), holder (window, name, harness, state, held_at, read from the pane now; null when no pane holds it), by (human, shell, the adding pane's window id, link:HOST or plugin:ID), at, blocked (reason, by, at; null when not blocked) and fan (fan, fan_id) for a card added in a fan."
+	rowFields := "id, session, title, preview (the first line of the prompt, at most 80 characters), stage, stage_at (Unix nanoseconds), holder (window, name, harness, state, held_at, read from the pane now; null when no pane holds it), by (human, shell, the adding pane's window id, link:HOST or plugin:ID), at, blocked (reason, by, at; null when not blocked), fan (fan, fan_id) for a card added in a fan, and touches and repo for a card that names what it touches."
 	// The fields of a card's row, which every verb that changes one returns.
 	row := []verbParam{
 		{Name: "id", Type: "string", Description: "The card."},
@@ -24,7 +24,12 @@ func taskVerbs() map[string]verbEntry {
 		{Name: "blocked", Type: "object", Description: "reason, by and at when the card is blocked, else null."},
 		{Name: "fan", Type: "object", Description: "fan and fan_id, for a card added in a fan's session."},
 		{Name: "attachment_count", Type: "int", Description: "How many attachments the card has. Absent for none."},
+		{Name: "touches", Type: "[]string", Description: "The paths the card's work changes, as patterns from the root of repo. Absent for none."},
+		{Name: "repo", Type: "string", Description: "The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found."},
 	}
+	touchRule := "A pattern is a path from the repository's root: it covers the path it names and everything under it, * stands for any run of characters in one segment and a segment ** for any number of segments, and every other character stands for itself. At most 32, of at most 200 bytes each."
+	repoRule := "The repository the touches are read in: the absolute path of its main checkout, with symbolic links resolved, which the daemon keeps as a name and never opens. Omit it from a pane to take the repository the pane's shell is in. Cards are compared only when this is the same, so touches with no repository overlap nothing."
+	overlaps := verbParam{Name: "overlaps", Type: "[]object", Description: "The open cards another pane holds, in any session of this daemon, whose touches overlap this card's in the same repository: session, id, title, stage, holder and patterns (each yours and theirs, one pattern of this card and one of that card). Absent for none. It is told, never enforced: the call succeeded. A pane without admin, and a connection restricted to its own session, is told of the card's own session only, as all_sessions is refused to it."}
 	host := verbParam{Name: "host", Type: "string", Description: "The machine that owns the card, for a project card claimed, released or finished from the pane that works on it here. The call is passed on over the link for this pane."}
 	remote := []verbParam{
 		{Name: "remote_window", Type: "string", Description: "Over the link only: the window on the calling machine that holds the card. Its daemon sends it; the holder's machine is the link's peer."},
@@ -105,11 +110,14 @@ func taskVerbs() map[string]verbEntry {
 				{Name: "harness", Type: "string", Description: "The agent the card is for, such as claude-code. Pull dispatch gives it only to that agent. Omit for any agent."},
 				{Name: "ask_first", Type: "bool", Description: "The card waits for a person to start it: dispatch never gives it to an agent.", Default: "false"},
 				{Name: "machine", Type: "string", Description: "Where the card's agent starts: any for the machine place-agent picks, or a linked machine's name. Omit for this machine."},
+				{Name: "touches", Type: "[]string", Description: "The paths the card's work changes, so list-task-overlaps and claim-task can say which other cards meet it. " + touchRule},
+				{Name: "repo", Type: "string", Description: "With touches. " + repoRule},
 				humanNonce,
 			},
 			returns: row,
 			examples: []string{
 				`{"id":1,"verb":"add-task","params":{"session":"work","title":"make the backoff jitter configurable","prompt":"Read api/retry.go and add a jitter option, with a test."}}`,
+				`{"id":1,"verb":"add-task","params":{"session":"work","title":"split the retry loop","touches":["api/retry.go","api/retry_test.go"],"repo":"/home/me/src/api"}}`,
 			},
 			handler: (*Daemon).verbAddTask,
 		},
@@ -150,7 +158,7 @@ func taskVerbs() map[string]verbEntry {
 			returns: slices.Concat(row, []verbParam{
 				{Name: "prompt", Type: "string", Description: "The prompt, as added."},
 				{Name: "attachments", Type: "[]object", Description: "The files and links on the card, in the order they were added: name, kind, media_type, size, hash, url (a link), note, by and at. get-task-attachment reads one."},
-				{Name: "history", Type: "[]object", Description: "Every change, oldest first, at most 100 (the first is kept): action (added, claimed, finished, staged, blocked, unblocked, released, attached, detached), by, at, stage, holder and reason. A release the daemon made has by tuios and reason pane closed, agent left or restart. A stage the daemon moved on its own ([tasks] auto_stage) has by tuios and a reason naming the fact: plan held for approval, agent working, fan check started, fan check failed in every attempt, or the pull request opened, merged or closed."},
+				{Name: "history", Type: "[]object", Description: "Every change, oldest first, at most 100 (the first is kept): action (added, claimed, finished, staged, blocked, unblocked, released, attached, detached, touches), by, at, stage, holder and reason. A release the daemon made has by tuios and reason pane closed, agent left or restart. A stage the daemon moved on its own ([tasks] auto_stage) has by tuios and a reason naming the fact: plan held for approval, agent working, fan check started, fan check failed in every attempt, or the pull request opened, merged or closed."},
 			}),
 			examples: []string{
 				`{"id":1,"verb":"get-task","params":{"session":"work","id":"t1"}}`,
@@ -160,7 +168,7 @@ func taskVerbs() map[string]verbEntry {
 		"claim-task": {
 			scope:       scopeTask,
 			link:        needWrite,
-			description: "Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.",
+			description: "Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts. A card whose touches overlap a card another pane holds is still taken, and the answer names that card in overlaps.",
 			params: append([]verbParam{
 				sessionParam,
 				{Name: "id", Type: "string", Description: "The card to take. Not with next."},
@@ -169,7 +177,7 @@ func taskVerbs() map[string]verbEntry {
 				humanNonce,
 				host,
 			}, remote...),
-			returns: row,
+			returns: slices.Concat(row, []verbParam{overlaps}),
 			examples: []string{
 				`{"id":1,"verb":"claim-task","params":{"session":"work","next":true,"window":"build"}}`,
 				`{"id":1,"verb":"claim-task","params":{"session":"work","id":"t1","window":"build"}}`,
@@ -202,6 +210,50 @@ func taskVerbs() map[string]verbEntry {
 				`{"id":1,"verb":"set-task-stage","params":{"session":"work","id":"t1","stage":"review"}}`,
 			},
 			handler: (*Daemon).verbSetTaskStage,
+		},
+		"set-task-touches": {
+			scope:       scopeTask,
+			link:        needWrite,
+			description: "Say which paths a task card's work changes, in the place of what it said before, or with clear take them off. It locks nothing: list-task-overlaps and claim-task read it to say which cards meet. Setting what the card has already changes nothing." + ownership,
+			params: []verbParam{
+				sessionParam,
+				id,
+				{Name: "touches", Type: "[]string", Description: "The paths. Required without clear. " + touchRule},
+				{Name: "repo", Type: "string", Description: repoRule},
+				{Name: "clear", Type: "bool", Description: "Take the touches and the repository off the card. Not with touches.", Default: "false"},
+				humanNonce,
+			},
+			returns: slices.Concat(row, []verbParam{overlaps}),
+			examples: []string{
+				`{"id":1,"verb":"set-task-touches","params":{"session":"work","id":"t1","touches":["internal/session/","docs/tasks.md"],"repo":"/home/me/src/api"}}`,
+				`{"id":1,"verb":"set-task-touches","params":{"session":"work","id":"t1","clear":true}}`,
+			},
+			handler: (*Daemon).verbSetTaskTouches,
+		},
+		"list-task-overlaps": {
+			scope:       scopeRead,
+			link:        needList,
+			description: "List the open task cards (not done) whose touches overlap those of one card, or a list of paths, in the same repository. Two patterns overlap when some path is covered by both, which is worked out from the patterns alone: no file is read. It reads one session, or with all_sessions every session of the daemon; cards on linked machines are not read, since a repository's path means nothing there.",
+			params: []verbParam{
+				sessionParam,
+				{Name: "id", Type: "string", Description: "The card whose touches are compared. It is left out of the answer. Pass id or touches."},
+				{Name: "touches", Type: "[]string", Description: "The paths to compare, without a card. " + touchRule},
+				{Name: "repo", Type: "string", Description: "With touches. " + repoRule + " Outside a pane it is required."},
+				{Name: "all_sessions", Type: "bool", Description: "Read the cards of every session on the daemon, in session name order.", Default: "false"},
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string", Description: "The session of the card, and the one read without all_sessions."},
+				{Name: "all_sessions", Type: "bool", Description: "True when every session was read."},
+				{Name: "id", Type: "string", Description: "The card asked about. Absent with touches."},
+				{Name: "repo", Type: "string", Description: "The repository compared in. Empty for a card that names none: nothing overlaps it."},
+				{Name: "touches", Type: "[]string", Description: "The patterns compared, as the card keeps them."},
+				{Name: "overlaps", Type: "[]object", Description: "One entry per card that overlaps, held or not: session, id, title, stage, holder (as list-tasks gives it; null when no pane holds it) and patterns (each yours and theirs, one pattern asked about and one of that card)."},
+			},
+			examples: []string{
+				`{"id":1,"verb":"list-task-overlaps","params":{"session":"work","id":"t1","all_sessions":true}}`,
+				`{"id":1,"verb":"list-task-overlaps","params":{"touches":["internal/session/"],"repo":"/home/me/src/api","all_sessions":true}}`,
+			},
+			handler: (*Daemon).verbListTaskOverlaps,
 		},
 		"block-task": {
 			scope:       scopeTask,

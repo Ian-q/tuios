@@ -18,7 +18,7 @@ const cardWriter = "task_move.go"
 var cardFields = map[string]bool{
 	"Stage": true, "StageAt": true, "Holder": true, "HeldAt": true, "HolderName": true, "HolderHarness": true,
 	"Dispatched": true, "Blocked": true, "Attempts": true, "Note": true, "Work": true, "Verify": true,
-	"Attachments": true,
+	"Attachments": true, "Touches": true, "Repo": true,
 }
 
 // TestOnlyTaskMoveWritesACardsLifecycle is the task card lint. A card's
