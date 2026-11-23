@@ -3085,7 +3085,7 @@ moves it back to `doing` while another may still be open.
 
 **Usage:**
 ```bash
-tuios task add [-p PROMPT] [--stage STAGE] [--project URL] [--machine any|HOST] TITLE... [flags]
+tuios task add [-p PROMPT] [--stage STAGE] [--project URL] [--machine any|HOST] [--touches PATTERN]... TITLE... [flags]
 tuios task ls [--stage STAGE] [--open] [--all-sessions | --project URL [--hosts]] [flags]
 tuios task get ID [flags]
 tuios task claim ID | --next [-w <window>] [flags]
@@ -3094,6 +3094,8 @@ tuios task stage ID STAGE [flags]
 tuios task block ID REASON... | --clear [flags]
 tuios task release ID [flags]
 tuios task rm ID [flags]
+tuios task touches ID [PATTERN...] [--clear] [--repo DIR] [flags]
+tuios task overlaps [ID] [--touches PATTERN]... [--repo DIR] [--all-sessions] [flags]
 tuios task attach ID FILE... [--name N] [--note TEXT] [--replace] [flags]
 tuios task attach ID --link URL [--name N] [--note TEXT] [flags]
 tuios task attach ID --screenshot -w PANE | --capture -w PANE [--scrollback] [--lines N] [flags]
@@ -3109,12 +3111,16 @@ tuios task dispatch [status | pause | resume | mode manual|pull|auto | preset | 
 - `--stage <stage>` (`add`, `ls`): The stage it starts in; for `ls`, only the cards in it
 - `--open` (`ls`): Leave out the cards that are done
 - `--all-sessions` (`ls`): List the cards of every session on this machine, with a SESSION column first. Takes no `--session`
+- `--all-sessions` (`overlaps`): Read the cards of every session on this machine, not only the session's. `--session` still names the session of the card
+- `--touches <pattern>` (`add`, `overlaps`): A path the card's work changes, from the root of the repository; give it once per path, at most 32. For `overlaps`, the paths to compare with no card
+- `--repo <dir>` (`add`, `touches`, `overlaps`): A folder of the repository the paths are in (default: the current folder). It goes with patterns only
 - `--project <url>` (`add`, `ls`): The repository the card is for, by its origin URL, or `.` for the repository of the current folder. For `ls`, list that repository's cards from every session, with HOST and SESSION columns. Takes no `--session`. Two spellings of one URL (`git@host:a/b.git`, `https://host/a/b`) name one project; a local path is refused
 - `--machine <m>` (`add`): Where the card's agent starts: `any` for the machine with the most room, this one or a linked one ([Any machine](#any-machine)), or one linked machine's name. Omit it for this machine. The capture sheet's Machine pill sets it
 - `--hosts` (`ls`): With `--project`, also list the project's cards on each linked machine. A machine that does not answer is named under the table
 - `--next` (`claim`): Take the oldest card no pane holds that is not blocked or done, and that no fan of another session works on
 - `-w, --window <target>` (`claim`): The pane that takes the card (default: this pane; required outside a pane)
 - `--clear` (`block`): Lift the block
+- `--clear` (`touches`): Take the touches off the card
 - `--name <name>` (`attach`): The name the card shows (default: the file's name; `PR #N` for a pull request link, else the link's host and path). One file only
 - `--note <text>` (`attach`): A line about the attachment. One file only
 - `--link <url>` (`attach`): Attach an http or https address instead of a file. A GitHub pull request's address is kind `pr`
@@ -3147,6 +3153,57 @@ attaches to the card it holds, and to the card it finished while that card
 waits in `verify` or `review`. The limits are `[tasks] attachment_max_mib`,
 `attachments_per_card` and `attachment_session_mib`
 ([CONFIGURATION.md](CONFIGURATION.md#the-task-board)).
+
+A card can say which paths its work changes, so that two agents in one
+repository hear that their cards meet before both edit the same file. `add
+--touches` names them when the card is made, and `touches ID PATTERN...` names
+them afterwards, in the place of what the card said before; `touches ID`
+prints them and `touches ID --clear` takes them off. `task get`, `ls --json`
+and the board's card preview show them. A pattern is a path from the root of
+the repository, with `/` between its segments:
+
+| Pattern | Covers |
+| --- | --- |
+| `internal/session/` | A folder: everything under it |
+| `docs/tasks.md` | The paths it matches, and no more |
+| `cmd/*/main.go` | `*` is any run of characters inside one segment |
+| `**/*_test.go` | A segment `**` is any number of segments, none included |
+
+Every other character stands for itself, `?` and `[` too, and case counts. A
+pattern starts at the root, so `*.go` is the Go files there. It may not be
+absolute or leave the repository with `..`. Quote a glob, or the shell expands
+it.
+
+Two patterns overlap when some path is covered by both. tuios works that out
+from the two patterns alone, exactly, and reads no file: `a/` and `a/b.go`
+overlap, `a/*.go` and `a/*_test.go` overlap, `a/*.go` and `a/*.md` do not. One
+more case counts, the one a forgotten `/` makes: when a pattern matches a path
+and the other spells out, with no glob, a path under it, the first names a
+folder, so `internal/session` and `internal/session/task.go` overlap. A folder
+that a glob only might match is not counted (`internal/*` and
+`internal/*/task.go` do not overlap), or `**/*.go` would overlap every path.
+End a folder with `/`.
+
+Only cards of the same repository are compared. The repository is the one the
+command runs in, kept as the absolute path of its main checkout with symbolic
+links resolved, so a linked git worktree and its main checkout are one
+repository, whatever session each is open in. Touches named outside every
+repository are kept and compared with nothing, and the command says so. Cards
+on linked machines are not compared: a path means nothing on another machine.
+
+`overlaps ID` lists the open cards (not done) whose touches overlap the
+card's, and `overlaps --touches PATTERN` the ones that overlap some paths, a
+line per pair of patterns: the card's session, id, stage and holder, your
+pattern and theirs. It reads the session, and with `--all-sessions` every
+session on this machine.
+
+Nothing is locked. `claim` takes a card whose touches overlap a card another
+pane holds, in any session, and prints a warning on standard error that names
+that card, its holder and the patterns; `touches` warns the same way. Standard
+output is unchanged, so a script that reads the id still does. With `--json`
+the cards are in `overlaps`. A pane without the `admin` grant is warned of
+cards in its own session only, as it lists only those. A daemon older than
+this refuses `add --touches`, and the command says the daemon is older.
 
 A card with a project shows on that repository's board in every session and on
 every linked machine. The machine where it was added owns it. A pane on
@@ -3261,6 +3318,12 @@ tuios task block t1 --clear
 
 # What is open
 tuios task ls --open
+
+# Say what a card changes, and see which open cards it meets
+tuios task add --touches api/retry.go --touches api/retry_test.go split the retry loop
+tuios task touches t1 internal/session/ 'cmd/**/*.go'
+tuios task overlaps t1 --all-sessions
+tuios task overlaps --touches docs/ --all-sessions
 
 # A card for the repository, and every machine's cards of it
 tuios task add --project . add retries to the client

@@ -13,7 +13,7 @@ import (
 
 // The task verbs: add-task, list-tasks, get-task, claim-task, finish-task,
 // set-task-stage, block-task, release-task and remove-task. The store is
-// task.go.
+// task.go. What a card touches is verb_task_touches.go.
 //
 // list-tasks and get-task read the session (scopeRead). Every other verb
 // writes the cards (scopeTask): a pane needs the task grant, and reaches only
@@ -131,6 +131,14 @@ type TaskRow struct {
 	// AttachmentCount is how many attachments the card has. get-task
 	// lists them.
 	AttachmentCount int `json:"attachment_count,omitempty"`
+	// Touches are the paths the card's work changes, as patterns under
+	// Repo, the repository's main checkout (task_touches.go).
+	Touches []string `json:"touches,omitempty"`
+	Repo    string   `json:"repo,omitempty"`
+	// Overlaps are the open cards another pane holds whose touches overlap
+	// this card's. Only the answers of claim-task and set-task-touches
+	// carry it; a list and an event never do.
+	Overlaps []TaskOverlap `json:"overlaps,omitempty"`
 }
 
 // TaskHolder is the pane that holds a card. Name, Harness and State are read
@@ -178,6 +186,7 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 	row.Machine = tk.Machine
 	row.Attempts, row.Note, row.Work, row.Verify = tk.Attempts, tk.Note, tk.Work, tk.Verify
 	row.AttachmentCount = len(tk.Attachments)
+	row.Touches, row.Repo = tk.Touches, tk.Repo
 	if host, window, ok := splitRemoteHolder(tk.Holder); ok {
 		row.Holder = &TaskHolder{Window: window, Host: host, HeldAt: tk.HeldAt, Name: tk.HolderName, Harness: tk.HolderHarness}
 	} else if tk.Holder != "" {
@@ -300,6 +309,10 @@ type addTaskParams struct {
 	Harness    string `json:"harness"`
 	AskFirst   bool   `json:"ask_first"`
 	Machine    string `json:"machine"`
+	// Touches are the paths the card's work changes, and Repo the
+	// repository they are read in (task_touches.go).
+	Touches []string `json:"touches"`
+	Repo    string   `json:"repo"`
 }
 
 // verbAddTask answers add-task.
@@ -333,6 +346,17 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 	if machine == federation.LocalHostName {
 		machine = ""
 	}
+	touches, verr := cleanTouches("touches", p.Touches)
+	if verr != nil {
+		return nil, verr
+	}
+	repo, verr := repoParam("repo", p.Repo)
+	if verr != nil {
+		return nil, verr
+	}
+	if repo != "" && len(touches) == 0 {
+		return nil, invalidParam("repo", "repo says where touches are read, so it goes with touches only")
+	}
 	sess, verr := d.resolveVerbSession(cs, p.Session)
 	if verr != nil {
 		return nil, verr
@@ -341,6 +365,7 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 	if verr != nil {
 		return nil, verr
 	}
+	repo = d.touchesRepo(repo, caller.window, touches)
 	var row TaskRow
 	err := sess.mutateState(func(st *SessionState) error {
 		if len(st.Tasks) >= taskMaxCards {
@@ -363,6 +388,8 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 			Harness:  harnessName,
 			AskFirst: p.AskFirst,
 			Machine:  machine,
+			Touches:  touches,
+			Repo:     repo,
 		}
 		if wt := st.Worktree; wt != nil && wt.Group != "" {
 			tk.Fan, tk.FanID = wt.Group, wt.FanID
@@ -659,6 +686,8 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	}
 	LogBasic("Window %s claimed task %s in session %s", shortWindowID(window), row.ID, sess.Name())
 	d.afterTaskEvent(sess, TaskActionClaimed, window, "", row)
+	// Told, never refused: the card is the pane's whatever it overlaps.
+	row.Overlaps = d.heldOverlaps(cs, sess, row)
 	return row.typed("task_claimed"), nil
 }
 

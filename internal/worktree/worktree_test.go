@@ -209,3 +209,58 @@ func TestChangeCountsAgreesWithTheSeparateWalks(t *testing.T) {
 		t.Errorf("fixture drifted: ChangeCounts = (%d, %d), Ignored = %d", gotChanges, gotIgnored, wantIgnored)
 	}
 }
+
+// TestMainRootIsOneNameForEveryCheckout: a task card's repository is
+// MainRoot of the folder its touches were named in, and two cards are
+// compared only when the two strings are equal. So every way into one
+// repository has to give the same string, and a folder in no repository none.
+//
+// How it could fail: a linked worktree answering its own root, so a card
+// named there never meets one named in the main checkout; a path through a
+// symbolic link answering the link, so the same checkout has two names; a
+// folder under the root answering itself; a folder outside every repository
+// answering some parent.
+func TestMainRootIsOneNameForEveryCheckout(t *testing.T) {
+	repo := testutil.GitRepo(t)
+	sub := filepath.Join(repo, "internal", "session")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(filepath.Dir(repo), "linked")
+	if _, err := Add(repo, linked, "feat/x", ""); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	linkedSub := filepath.Join(linked, "docs")
+	if err := os.MkdirAll(linkedSub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The link sits in a folder of its own, so nothing above it is a
+	// repository but through it.
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(repo, alias); err != nil {
+		t.Skipf("no symbolic links here: %v", err)
+	}
+	wtAlias := filepath.Join(t.TempDir(), "wt-alias")
+	if err := os.Symlink(linked, wtAlias); err != nil {
+		t.Fatal(err)
+	}
+	for name, dir := range map[string]string{
+		"the main checkout":                repo,
+		"a folder under it":                sub,
+		"a linked worktree":                linked,
+		"a folder under the worktree":      linkedSub,
+		"the main checkout through a link": alias,
+		"a folder through the link":        filepath.Join(alias, "internal", "session"),
+		"the worktree through a link":      wtAlias,
+	} {
+		if got, ok := MainRoot(dir); !ok || got != repo {
+			t.Errorf("MainRoot of %s (%s) = %q, %v, want %q", name, dir, got, ok, repo)
+		}
+	}
+	if got, ok := MainRoot(t.TempDir()); ok {
+		t.Errorf("MainRoot outside every repository = %q, want none", got)
+	}
+	if got, ok := MainRoot("relative/path"); ok {
+		t.Errorf("MainRoot of a relative path = %q, want none", got)
+	}
+}

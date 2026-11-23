@@ -468,9 +468,10 @@ func (m *OS) drawKanbanPreview(c *ckCanvas, l ckLook, x, w, y0, y1, top int, she
 }
 
 // ckCardBody is a card's body as lines width cells wide: who holds it, its
-// lifecycle, the block, the prompt as Markdown, the attachments, the
-// history and the end of the verify output. With head it starts with the
-// title and the stage line, which the Card tab draws above its tabs.
+// lifecycle, the block, what it touches, the prompt as Markdown, the
+// attachments, the history and the end of the verify output. With head it
+// starts with the title and the stage line, which the Card tab draws above
+// its tabs.
 func (m *OS) ckCardBody(l ckLook, r ckRow, card session.TaskRow, width int, now time.Time, head bool) []ckLine {
 	pal := l.pal
 	var out []ckLine
@@ -520,6 +521,19 @@ func (m *OS) ckCardBody(l ckLook, r ckRow, card session.TaskRow, width int, now 
 			segs = append(segs, ckSeg{t: sepWord() + printableTitle(wt.Branch), fg: pal.FgMute})
 		}
 		line(segs...)
+	}
+	if len(card.Touches) > 0 {
+		// The paths the card's work changes (tuios task touches), wrapped
+		// under their label.
+		const label = "Touches "
+		wrapped := ansi.Wordwrap(printableTitle(strings.Join(card.Touches, "  ")), max(width-len(label), 8), "")
+		for i, s := range strings.Split(wrapped, "\n") {
+			if i == 0 {
+				line(ckSeg{t: label, fg: pal.FgDim}, ckSeg{t: s, fg: pal.Fg})
+				continue
+			}
+			out = append(out, ckLine{indent: len(label), segs: []ckSeg{{t: s, fg: pal.Fg}}})
+		}
 	}
 	d := m.Inbox.ck.card
 	switch {

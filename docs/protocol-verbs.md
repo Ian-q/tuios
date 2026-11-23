@@ -100,6 +100,7 @@ It also has more about the verbs that need it.
 - [`list-recordings`](#list-recordings)
 - [`list-routes`](#list-routes)
 - [`list-sessions`](#list-sessions)
+- [`list-task-overlaps`](#list-task-overlaps)
 - [`list-tasks`](#list-tasks)
 - [`list-themes`](#list-themes)
 - [`list-verbs`](#list-verbs)
@@ -189,6 +190,7 @@ It also has more about the verbs that need it.
 - [`set-session-space`](#set-session-space)
 - [`set-task-dispatch`](#set-task-dispatch)
 - [`set-task-stage`](#set-task-stage)
+- [`set-task-touches`](#set-task-touches)
 - [`set-window`](#set-window)
 - [`set-workspace-name`](#set-workspace-name)
 - [`set-workspace-order`](#set-workspace-order)
@@ -264,6 +266,8 @@ Add a task card to a session: one unit of work, with a title, the prompt for the
 | `harness` | string |  |  | The agent the card is for, such as claude-code. Pull dispatch gives it only to that agent. Omit for any agent. |
 | `ask_first` | bool |  | `false` | The card waits for a person to start it: dispatch never gives it to an agent. |
 | `machine` | string |  |  | Where the card's agent starts: any for the machine place-agent picks, or a linked machine's name. Omit for this machine. |
+| `touches` | []string |  |  | The paths the card's work changes, so list-task-overlaps and claim-task can say which other cards meet it. A pattern is a path from the repository's root: it covers the path it names and everything under it, * stands for any run of characters in one segment and a segment ** for any number of segments, and every other character stands for itself. At most 32, of at most 200 bytes each. |
+| `repo` | string |  |  | With touches. The repository the touches are read in: the absolute path of its main checkout, with symbolic links resolved, which the daemon keeps as a name and never opens. Omit it from a pane to take the repository the pane's shell is in. Cards are compared only when this is the same, so touches with no repository overlap nothing. |
 | `human_nonce` | string |  |  | The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human. |
 
 | Result field | Type | Description |
@@ -280,9 +284,15 @@ Add a task card to a session: one unit of work, with a title, the prompt for the
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
 | `fan` | object | fan and fan_id, for a card added in a fan's session. |
 | `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
 
 ```json
 {"id":1,"verb":"add-task","params":{"session":"work","title":"make the backoff jitter configurable","prompt":"Read api/retry.go and add a jitter option, with a test."}}
+```
+
+```json
+{"id":1,"verb":"add-task","params":{"session":"work","title":"split the retry loop","touches":["api/retry.go","api/retry_test.go"],"repo":"/home/me/src/api"}}
 ```
 
 ### `agent-activity`
@@ -737,6 +747,8 @@ Mark a task card stuck, saying what it waits on, or with clear lift the mark. A 
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
 | `fan` | object | fan and fan_id, for a card added in a fan's session. |
 | `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
 
 ```json
 {"id":1,"verb":"block-task","params":{"session":"work","id":"t1","reason":"waiting on the staging API key"}}
@@ -888,7 +900,7 @@ Read what one turn changed: the diff of a checkpoint against the pane's checkpoi
 
 ### `claim-task`
 
-Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.
+Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts. A card whose touches overlap a card another pane holds is still taken, and the answer names that card in overlaps.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -916,6 +928,9 @@ Take a task card for a pane: the card id, or with next the oldest card no pane h
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
 | `fan` | object | fan and fan_id, for a card added in a fan's session. |
 | `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
+| `overlaps` | []object | The open cards another pane holds, in any session of this daemon, whose touches overlap this card's in the same repository: session, id, title, stage, holder and patterns (each yours and theirs, one pattern of this card and one of that card). Absent for none. It is told, never enforced: the call succeeded. A pane without admin, and a connection restricted to its own session, is told of the card's own session only, as all_sessions is refused to it. |
 
 ```json
 {"id":1,"verb":"claim-task","params":{"session":"work","next":true,"window":"build"}}
@@ -1182,6 +1197,8 @@ Take an attachment off a task card. Its file goes when no card names it. A pane 
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
 | `fan` | object | fan and fan_id, for a card added in a fan's session. |
 | `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
 
 ```json
 {"id":1,"verb":"detach-task","params":{"session":"work","id":"t1","name":"after.png"}}
@@ -1725,6 +1742,8 @@ Mark a task card done. Its holder lets it go and its block, if any, is lifted. F
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
 | `fan` | object | fan and fan_id, for a card added in a fan's session. |
 | `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
 
 ```json
 {"id":1,"verb":"finish-task","params":{"session":"work","id":"t1"}}
@@ -1904,9 +1923,11 @@ Read one task card whole: its row, its prompt and its history.
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
 | `fan` | object | fan and fan_id, for a card added in a fan's session. |
 | `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
 | `prompt` | string | The prompt, as added. |
 | `attachments` | []object | The files and links on the card, in the order they were added: name, kind, media_type, size, hash, url (a link), note, by and at. get-task-attachment reads one. |
-| `history` | []object | Every change, oldest first, at most 100 (the first is kept): action (added, claimed, finished, staged, blocked, unblocked, released, attached, detached), by, at, stage, holder and reason. A release the daemon made has by tuios and reason pane closed, agent left or restart. A stage the daemon moved on its own ([tasks] auto_stage) has by tuios and a reason naming the fact: plan held for approval, agent working, fan check started, fan check failed in every attempt, or the pull request opened, merged or closed. |
+| `history` | []object | Every change, oldest first, at most 100 (the first is kept): action (added, claimed, finished, staged, blocked, unblocked, released, attached, detached, touches), by, at, stage, holder and reason. A release the daemon made has by tuios and reason pane closed, agent left or restart. A stage the daemon moved on its own ([tasks] auto_stage) has by tuios and a reason naming the fact: plan held for approval, agent working, fan check started, fan check failed in every attempt, or the pull request opened, merged or closed. |
 
 ```json
 {"id":1,"verb":"get-task","params":{"session":"work","id":"t1"}}
@@ -2553,6 +2574,35 @@ No params.
 {"id":1,"verb":"list-sessions"}
 ```
 
+### `list-task-overlaps`
+
+List the open task cards (not done) whose touches overlap those of one card, or a list of paths, in the same repository. Two patterns overlap when some path is covered by both, which is worked out from the patterns alone: no file is read. It reads one session, or with all_sessions every session of the daemon; cards on linked machines are not read, since a repository's path means nothing there.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
+| `id` | string |  |  | The card whose touches are compared. It is left out of the answer. Pass id or touches. |
+| `touches` | []string |  |  | The paths to compare, without a card. A pattern is a path from the repository's root: it covers the path it names and everything under it, * stands for any run of characters in one segment and a segment ** for any number of segments, and every other character stands for itself. At most 32, of at most 200 bytes each. |
+| `repo` | string |  |  | With touches. The repository the touches are read in: the absolute path of its main checkout, with symbolic links resolved, which the daemon keeps as a name and never opens. Omit it from a pane to take the repository the pane's shell is in. Cards are compared only when this is the same, so touches with no repository overlap nothing. Outside a pane it is required. |
+| `all_sessions` | bool |  | `false` | Read the cards of every session on the daemon, in session name order. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `session` | string | The session of the card, and the one read without all_sessions. |
+| `all_sessions` | bool | True when every session was read. |
+| `id` | string | The card asked about. Absent with touches. |
+| `repo` | string | The repository compared in. Empty for a card that names none: nothing overlaps it. |
+| `touches` | []string | The patterns compared, as the card keeps them. |
+| `overlaps` | []object | One entry per card that overlaps, held or not: session, id, title, stage, holder (as list-tasks gives it; null when no pane holds it) and patterns (each yours and theirs, one pattern asked about and one of that card). |
+
+```json
+{"id":1,"verb":"list-task-overlaps","params":{"session":"work","id":"t1","all_sessions":true}}
+```
+
+```json
+{"id":1,"verb":"list-task-overlaps","params":{"touches":["internal/session/"],"repo":"/home/me/src/api","all_sessions":true}}
+```
+
 ### `list-tasks`
 
 List a session's task cards, oldest first.
@@ -2571,7 +2621,7 @@ List a session's task cards, oldest first.
 |---|---|---|
 | `session` | string | The session listed. Absent with all_sessions. |
 | `all_sessions` | bool | True when every session was listed. Each row names its session. |
-| `tasks` | []object | One row per card: id, session, title, preview (the first line of the prompt, at most 80 characters), stage, stage_at (Unix nanoseconds), holder (window, name, harness, state, held_at, read from the pane now; null when no pane holds it), by (human, shell, the adding pane's window id, link:HOST or plugin:ID), at, blocked (reason, by, at; null when not blocked) and fan (fan, fan_id) for a card added in a fan. |
+| `tasks` | []object | One row per card: id, session, title, preview (the first line of the prompt, at most 80 characters), stage, stage_at (Unix nanoseconds), holder (window, name, harness, state, held_at, read from the pane now; null when no pane holds it), by (human, shell, the adding pane's window id, link:HOST or plugin:ID), at, blocked (reason, by, at; null when not blocked), fan (fan, fan_id) for a card added in a fan, and touches and repo for a card that names what it touches. |
 
 ```json
 {"id":1,"verb":"list-tasks","params":{"session":"work","open":true}}
@@ -3663,6 +3713,8 @@ Let a task card go without finishing it. It keeps its stage, and another pane ca
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
 | `fan` | object | fan and fan_id, for a card added in a fan's session. |
 | `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
 
 ```json
 {"id":1,"verb":"release-task","params":{"session":"work","id":"t1"}}
@@ -4977,9 +5029,50 @@ Move a task card to a stage by hand. The daemon also moves cards on its own ([ta
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
 | `fan` | object | fan and fan_id, for a card added in a fan's session. |
 | `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
 
 ```json
 {"id":1,"verb":"set-task-stage","params":{"session":"work","id":"t1","stage":"review"}}
+```
+
+### `set-task-touches`
+
+Say which paths a task card's work changes, in the place of what it said before, or with clear take them off. It locks nothing: list-task-overlaps and claim-task read it to say which cards meet. Setting what the card has already changes nothing. A pane changes only the card it holds unless it holds admin; the person, a shell, a link and a plugin change any card.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
+| `id` | string | yes |  | The card, such as t1. |
+| `touches` | []string |  |  | The paths. Required without clear. A pattern is a path from the repository's root: it covers the path it names and everything under it, * stands for any run of characters in one segment and a segment ** for any number of segments, and every other character stands for itself. At most 32, of at most 200 bytes each. |
+| `repo` | string |  |  | The repository the touches are read in: the absolute path of its main checkout, with symbolic links resolved, which the daemon keeps as a name and never opens. Omit it from a pane to take the repository the pane's shell is in. Cards are compared only when this is the same, so touches with no repository overlap nothing. |
+| `clear` | bool |  | `false` | Take the touches and the repository off the card. Not with touches. |
+| `human_nonce` | string |  |  | The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `id` | string | The card. |
+| `session` | string | Its session. |
+| `title` | string | Its title. |
+| `preview` | string | The first line of its prompt, at most 80 characters. |
+| `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
+| `stage_at` | int | When it entered the stage, Unix nanoseconds. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
+| `at` | int | When it was added, Unix nanoseconds. |
+| `blocked` | object | reason, by and at when the card is blocked, else null. |
+| `fan` | object | fan and fan_id, for a card added in a fan's session. |
+| `attachment_count` | int | How many attachments the card has. Absent for none. |
+| `touches` | []string | The paths the card's work changes, as patterns from the root of repo. Absent for none. |
+| `repo` | string | The repository the touches are read in: the absolute path of its main checkout, which a linked worktree shares. Absent when none was found. |
+| `overlaps` | []object | The open cards another pane holds, in any session of this daemon, whose touches overlap this card's in the same repository: session, id, title, stage, holder and patterns (each yours and theirs, one pattern of this card and one of that card). Absent for none. It is told, never enforced: the call succeeded. A pane without admin, and a connection restricted to its own session, is told of the card's own session only, as all_sessions is refused to it. |
+
+```json
+{"id":1,"verb":"set-task-touches","params":{"session":"work","id":"t1","touches":["internal/session/","docs/tasks.md"],"repo":"/home/me/src/api"}}
+```
+
+```json
+{"id":1,"verb":"set-task-touches","params":{"session":"work","id":"t1","clear":true}}
 ```
 
 ### `set-window`

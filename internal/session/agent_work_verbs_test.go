@@ -48,6 +48,8 @@ var agentWorkVerbTable = []struct {
 	{"block-task", scopeTask, []string{config.LinkAllowWrite}, false},
 	{"release-task", scopeTask, []string{config.LinkAllowWrite}, false},
 	{"remove-task", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"set-task-touches", scopeTask, []string{config.LinkAllowWrite}, false},
+	{"list-task-overlaps", scopeRead, []string{config.LinkAllowList}, false},
 }
 
 func TestAgentWorkVerbsAreClassifiedAsThePlanSays(t *testing.T) {

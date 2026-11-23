@@ -1912,7 +1912,7 @@ The verbs that act as the person need the nonce a client receives when it attach
 
 The verbs behind `tuios task` and the [task board](https://tuios.dev/docs/task-boards). A pane needs the `task` grant to change a card, and changes only the card it holds unless it holds `admin`.
 
-[`add-task`](protocol-verbs.md#add-task), [`list-tasks`](protocol-verbs.md#list-tasks), [`get-task`](protocol-verbs.md#get-task), [`claim-task`](protocol-verbs.md#claim-task), [`finish-task`](protocol-verbs.md#finish-task), [`set-task-stage`](protocol-verbs.md#set-task-stage), [`block-task`](protocol-verbs.md#block-task), [`release-task`](protocol-verbs.md#release-task), [`remove-task`](protocol-verbs.md#remove-task), [`attach-task`](protocol-verbs.md#attach-task), [`detach-task`](protocol-verbs.md#detach-task), [`get-task-attachment`](protocol-verbs.md#get-task-attachment), [`get-task-dispatch`](protocol-verbs.md#get-task-dispatch).
+[`add-task`](protocol-verbs.md#add-task), [`list-tasks`](protocol-verbs.md#list-tasks), [`get-task`](protocol-verbs.md#get-task), [`claim-task`](protocol-verbs.md#claim-task), [`finish-task`](protocol-verbs.md#finish-task), [`set-task-stage`](protocol-verbs.md#set-task-stage), [`block-task`](protocol-verbs.md#block-task), [`release-task`](protocol-verbs.md#release-task), [`remove-task`](protocol-verbs.md#remove-task), [`set-task-touches`](protocol-verbs.md#set-task-touches), [`list-task-overlaps`](protocol-verbs.md#list-task-overlaps), [`attach-task`](protocol-verbs.md#attach-task), [`detach-task`](protocol-verbs.md#detach-task), [`get-task-attachment`](protocol-verbs.md#get-task-attachment), [`get-task-dispatch`](protocol-verbs.md#get-task-dispatch).
 
 A pane attaches to the card it holds, and to the card it finished while that card waits in `verify` or `review`. A name already on the card with other content is `invalid_params` unless `replace` is set. With the same content it is left as it is and named in `unchanged`, so a retry succeeds. A state push never carries a card's attachments.
 
@@ -2223,7 +2223,7 @@ What a restricted connection may call:
 |---|---|---|---|
 | open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection`, `artifact-list`, `list-keys`, `pane-grants`, `tml-get`, `tml-validate` | allowed | allowed |
 | across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake`, `list-recordings`, `list-routes`, `search-panes` | `forbidden` | allowed |
-| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env`, `agent-activity`, `agent-message-receipts`, `checkpoint-diff`, `command-history`, `compare-fan`, `get-approval`, `get-note`, `get-task`, `get-task-attachment`, `get-task-dispatch`, `list-checkpoints`, `list-ports`, `list-queued`, `list-tasks`, `review-diff`, `ship-status`, `stream-pane`, `tml-list` | session in reach | allowed |
+| read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env`, `agent-activity`, `agent-message-receipts`, `checkpoint-diff`, `command-history`, `compare-fan`, `get-approval`, `get-note`, `get-task`, `get-task-attachment`, `get-task-dispatch`, `list-checkpoints`, `list-ports`, `list-queued`, `list-task-overlaps`, `list-tasks`, `review-diff`, `ship-status`, `stream-pane`, `tml-list` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-hook-event`, `agent-statusline-event`, `report-program-status`, `agent-mail-notice`, `ask-human`, `prompt`, `mark-recording` | own pane only | allowed |
 | mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run`, `cancel-queued`, `clear-history`, `queue-prompt`, `restore-checkpoint`, `review-note`, `send-review`, `set-note`, `ship-commit`, `ship-merge`, `ship-pr`, `ship-push`, `tml-close`, `tml-open`, `tml-patch`, `tml-replace` | session in reach | `forbidden` |
@@ -2231,7 +2231,7 @@ What a restricted connection may call:
 | read the paste buffers | `list-buffers`, `show-buffer` | `forbidden` | allowed |
 | change the paste buffers | `set-buffer`, `delete-buffer` | `forbidden` | `forbidden` |
 | paste a buffer | `paste-buffer` | `forbidden`: it reads the buffers | `forbidden` |
-| task cards | `add-task`, `attach-task`, `block-task`, `claim-task`, `detach-task`, `finish-task`, `release-task`, `remove-task`, `set-task-dispatch`, `set-task-stage` | session in reach | `forbidden` |
+| task cards | `add-task`, `attach-task`, `block-task`, `claim-task`, `detach-task`, `finish-task`, `release-task`, `remove-task`, `set-task-dispatch`, `set-task-stage`, `set-task-touches` | session in reach | `forbidden` |
 | everything else | | `forbidden` | `forbidden` |
 
 Under `own`:
@@ -2277,7 +2277,7 @@ person configured) is held to nothing new.
 | `fan` | What `write` allows, in the sessions of its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
 | `respond` | Answer an on-screen prompt with `respond`, without the person's `human_nonce`, on a pane in its reach, and type into a pane on `needs_input` |
 | `files` | The transfer verbs, held to two rules. `transfer-start`: each end on this machine is inside the pane's folder (its session's worktree when tuios made it, else the folder the pane started in; a `cd` or an OSC 7 does not move it, and the home folder, a folder above it or a folder another user owns is never one. The folder is resolved through its links once, when it is recorded), and every file the copy reads or writes here goes through an os.Root at that folder, and each end on a host is under that host's home or is its receive folder (no `path`). The other transfer verbs see and act on only the copies the pane started. A pane without admin starts windows (new-window, new-session, popup, start-agent, a plugin pane) only inside its folder, and types only into panes whose files folder is inside its own |
-| `task` | The task verbs that change a card (`add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`) in the pane's own session. A pane claims only for itself and changes only the card it holds. See [Task verbs](#task-verbs) |
+| `task` | The task verbs that change a card (`add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `set-task-touches`) in the pane's own session. A pane claims only for itself and changes only the card it holds. See [Task verbs](#task-verbs) |
 | `admin` | Everything else, as every pane could before grants: every session, the listings across sessions, windows, layouts, options, `kill-session`, any task card and `remove-task`, and the client protocol (attach, and `run-command`, which sends a client protocol message). Implies `read`, `write`, `fan`, `files` and `task`, never `respond` |
 
 Whatever it holds, a pane may call `hello`, `list-verbs`, `unsubscribe`,
@@ -7283,7 +7283,7 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task`, `get-task-attachment` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `prompt` (whose handler refuses a link caller too), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `attach-task`, `detach-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `prompt` (whose handler refuses a link caller too), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `set-task-touches`, `attach-task`, `detach-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image` |
 | `write` and `files` | `paste-image` |
@@ -7991,7 +7991,7 @@ they make anything: a refusal names `task` in its hint.
 
 | Verb | What it does | A pane without `admin` | Over a link | Result `type` |
 | --- | --- | --- | --- | --- |
-| `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`), `project` (the repository's origin URL) | `task`, own session | `write` | `task_added` |
+| `add-task` | Add a card: `title` (required, at most 200 bytes), `prompt` (at most 16 KiB), `stage` (default `todo`), `project` (the repository's origin URL), `touches` and `repo` (what its work changes, see below) | `task`, own session | `write` | `task_added` |
 | `list-tasks` | The session's cards, oldest first. `stage`, `holder` and `open` (leave out `done`) narrow it. `all_sessions` lists every session's, in session name order, and takes no `session` or `holder`. `project` lists one repository's cards from every session; `hosts` with it also asks each linked machine for its own, and `hosts` with `all_sessions` adds every linked machine's project cards | `read` | `list` | `task_list` |
 | `get-task` | One card with its `prompt`, `history` and `attachments` | `read` | `list` | `task` |
 | `attach-task` | Put a file (`content`, base64, with `name`), several (`files`, each `name` and `content`, one change and one history entry), a `link`, or a pane the daemon takes (`screenshot` or `capture`, each with `window`, `scrollback`, `lines`) on the card, with `note`; `host` passes it on to the machine that owns a project card; `replace` puts it in the place of one with the same name. Refusals: `attachment_too_large`, `attachment_limit` | `task`; the card it holds, or the card it finished while it waits in `verify` or `review` | `write` | `task_attached` with `attachment` and `task` |
@@ -8003,6 +8003,8 @@ they make anything: a refusal names `task` in its hint.
 | `set-task-stage` | Move the card to `stage` | `task`; only the card it holds | `write` | `task_changed` |
 | `block-task` | Mark the card stuck with `reason`, or lift it with `clear` | `task`; only the card it holds | `write` | `task_changed` |
 | `release-task` | Let the card go and keep its stage | `task`; only the card it holds | `write` | `task_changed` |
+| `set-task-touches` | Replace what the card touches with `touches` (in `repo`), or take it off with `clear`. The answer carries `overlaps` | `task`; only the card it holds | `write` | `task_changed` |
+| `list-task-overlaps` | The open cards whose touches overlap those of the card `id`, or `touches` in `repo`, in the session, or with `all_sessions` in every session | `read` | `list` | `task_overlaps` with `overlaps` |
 | `remove-task` | Remove the card and its history | refused | `write` | `task_removed` with `id` |
 | `get-task-dispatch` | The dispatch settings: `paused`, `stopped` (why all dispatch stopped on its own), `quiet`, `quiet_now`, `boards` (each with `board`, `project` or `session`, `mode`, `failures`, `stopped`), and `board` for the board `project` or `session` names | `read` | `list` | `task_dispatch` |
 | `set-task-dispatch` | `action`: `mode` (with `mode` `manual`, `pull` or `auto`, for the board `project` or `session` names; auto needs a preset), `preset` (`agent`, `model`, `effort`, `permission_mode`, `machine`), `cap` (`cap`, `machine_cap`), `pause`, `resume` (lifts the pause and every stop), `quiet` (with `quiet`, such as `22:00-07:00`, or `off`) or `verify` (with `verify`, a shell line or `off`, and `verify_timeout` in seconds) | `pause` only; `verify` is refused; the rest need `admin` | refused | `task_dispatch` |
@@ -8013,6 +8015,36 @@ did), `work` (`host`, `session`, `window`, `dir` where its agent worked) and
 `verify` (`state` running, passed or failed, `exit`, `note`, `tail`, the last
 2 KiB of the output, `started_at`, `finished_at`). The history action
 `verified` records how a verify ended.
+
+A card can say what its work changes. `touches` is a list of patterns, at
+most 32 of at most 200 bytes, each a path from the root of the repository
+with `/` between its segments. A pattern that ends in `/` is a folder and
+covers everything under it; any other pattern covers the paths it matches.
+`*` is any run of characters inside one segment, a segment `**` is any number
+of segments, none included, and every other character stands for itself. A
+pattern that is absolute, or leaves the repository with `..`, is refused.
+`repo` is the repository the patterns are read in: the absolute path of its
+main checkout with symbolic links resolved, so a linked worktree and its main
+checkout send the same value (`tuios task` works it out from the folder it
+runs in). The daemon keeps it as a name and never opens it. A pane that sends
+`touches` with no `repo` gets the repository its shell is in. A row carries
+`touches` and `repo`, and `task-changed` with action `touches` says they
+changed.
+
+Two patterns overlap when some path is covered by both, which the daemon
+decides from the two patterns alone, exactly, with no file read. It also
+counts a pattern that matches a path the other one spells out, with no glob,
+a path under: `internal/session` and `internal/session/task.go` overlap,
+since the first can only be a folder then. A folder a glob only might match
+is not counted. Cards are compared only when their `repo` is the same string;
+a card with no `repo` overlaps nothing, and cards on linked machines are not
+compared. `list-task-overlaps` gives one entry per card that overlaps:
+`session`, `id`, `title`, `stage`, `holder` and `patterns`, each `yours` and
+`theirs`. `claim-task` and `set-task-touches` put the same entries in
+`overlaps` for the open cards another pane holds, in any session of the
+daemon. It is told and never enforced: the claim is made. A pane without
+`admin`, and a connection restricted to its own session, is told of the
+card's own session only, since `all_sessions` is refused to it.
 
 `add-task` also takes `harness`, the agent the card is for, and `ask_first`,
 which keeps the card for a person. A row carries them, and `dispatched` when
@@ -8147,7 +8179,7 @@ Event types:
 | `transfer-file` | One file of a copy ended. `action` and `file.state` are `done` (copied and checked), `same` (there already with the same bytes), `skipped` (there and different, left as it was), `conflict` (made there during the copy, left as it was) or `failed`. `file` has `id`, `pane`, `rel`, `state`, `sha256`, `code` and `error`. Opt-in: only a subscription whose `types` names it receives it. Not replayed on a resume. | `action`, `file` |
 | `task-claimed` | A pane took a task card. `task` is the card's row as `list-tasks` gives it, and `window` the pane that took it. See [Task verbs](#task-verbs). | `session`, `window`, `task` |
 | `task-finished` | A task card was marked done. `window` is the pane that held it, empty when none did. | `session`, `window`, `task` |
-| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released`, `attached`, `detached` or `removed` (`action`). An attach or a detach carries the attachment's name in `reason`. A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
+| `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released`, `attached`, `detached`, `touches` (what it touches changed) or `removed` (`action`). An attach or a detach carries the attachment's name in `reason`. A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
 | `task-dispatch` | A board's dispatch mode or a switch changed, or dispatch stopped on its own (`action` `stopped`, `reason` such as `3 failures in a row` or `usage limit reported by claude-code`). `dispatch` is the whole status as `get-task-dispatch` gives it. It names no session. | `action`, `reason`, `dispatch` |
 | `keep-awake` | The daemon took or dropped its hold that keeps the machine awake, the number of working agent panes changed while `keep_awake` is `agents`, or `keep_awake` changed. `mode` is `off`, `on` or `agents`, `state` is `held` or `released`, `working` counts the working agent panes on this machine, and `reason` says why the machine could not be held awake, when it could not. See [get-keep-awake](#get-keep-awake). It names no session. | `mode`, `state`, `working`, `reason` |
 | `theme` | A TUI client shows another theme. `theme` has `id` (`none` when no theme is in force and the terminal's own colours show), `background` (`#rrggbb`, absent when the client does not know it yet), `light` (absent with no `background`) and `preview`. `preview` is `true` for each theme the theme picker or the theme editor shows on the way to a pick. When the picker closes, one event with `preview` `false` gives the theme that stays: the pick, or the theme from before a cancel. Opening the picker sends nothing. `client_id` and `pid` name the client, because each client has its own theme. The `after-theme-change` hook runs for the events with `preview` `false` only. Opt-in: only a subscription whose `types` names it receives it. | `session`, `client_id`, `pid`, `theme` |

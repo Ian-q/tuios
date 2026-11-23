@@ -54,6 +54,7 @@ command. It opens the window manager.
 | Show the person a form, a table or a dashboard, and wait for the answer | `tuios tml show FILE --wait`. `tuios --skill tml` has the components. |
 | See how a TML surface looks, before and after you show it | `tuios tml render FILE`, then `tuios capture-pane -s "$TUIOS_SESSION" -w WINDOW` on the open surface |
 | Take the next task card, and finish it | `tuios task claim --next` then `tuios task done ID`. `tuios --skill tasks` has the rest. |
+| Say which paths your card changes, and see who else is in them | `tuios task touches ID PATTERN...` then `tuios task overlaps ID --all-sessions`. A claim warns when your card meets one another pane holds. |
 | Leave a note for the person who comes back, before you stop or hand back | `tuios note set "next: run the migration"`. Add `-w "$TUIOS_WINDOW_ID"` for a note on your own pane. `tuios note get` reads it. |
 | Show that you work, or wait for approval | `tuios set-agent-state working -m 'refactor payments'` or `tuios set-agent-state needs_input --kind approval -m 'approve make deploy'` |
 

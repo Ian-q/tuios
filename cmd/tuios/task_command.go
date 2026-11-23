@@ -36,6 +36,11 @@ it on 'tuios subscribe --types task-changed'.
 The stages are todo, plan, doing, verify, review, shipped and done. A claim
 moves a card in todo or plan to doing; 'tuios task stage' moves it by hand.
 
+A card can say which paths its work changes ('tuios task add --touches',
+'tuios task touches'). Nothing is locked by it: 'tuios task overlaps' lists
+the cards that meet, and a claim that meets a card another pane holds says
+so.
+
 From inside a pane, a card needs the task grant to change, a pane claims only
 for itself, and it changes only the card it holds unless it holds admin.`,
 		Example: `  # A conductor adds the work
@@ -47,12 +52,17 @@ for itself, and it changes only the card it holds unless it holds admin.`,
 
   # What there is, and one card whole
   tuios task ls --open
-  tuios task get t1`,
+  tuios task get t1
+
+  # Say what a card changes, and see which open cards it meets
+  tuios task touches t1 api/retry.go api/retry_test.go
+  tuios task overlaps t1 --all-sessions`,
 	}
 	cmd.AddCommand(
 		newTaskAddCommand(), newTaskListCommand(), newTaskGetCommand(), newTaskClaimCommand(),
 		newTaskDoneCommand(), newTaskStageCommand(), newTaskBlockCommand(), newTaskReleaseCommand(),
 		newTaskRemoveCommand(), newTaskDispatchCommand(),
+		newTaskTouchesCommand(), newTaskOverlapsCommand(),
 		newTaskAttachCommand(), newTaskAttachmentsCommand(), newTaskDetachCommand(), newTaskAttachmentCommand(),
 	)
 	return cmd
@@ -71,22 +81,17 @@ func (f *taskFlags) register(cmd *cobra.Command) {
 
 // taskRow is one card as the task verbs return it.
 type taskRow struct {
-	Session string `json:"session"`
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Preview string `json:"preview"`
-	Stage   string `json:"stage"`
-	StageAt int64  `json:"stage_at"`
-	Holder  *struct {
-		Window string `json:"window"`
-		Host   string `json:"host"`
-		Name   string `json:"name"`
-		State  string `json:"state"`
-	} `json:"holder"`
-	Project string `json:"project"`
-	Host    string `json:"host"`
-	By      string `json:"by"`
-	At      int64  `json:"at"`
+	Session string      `json:"session"`
+	ID      string      `json:"id"`
+	Title   string      `json:"title"`
+	Preview string      `json:"preview"`
+	Stage   string      `json:"stage"`
+	StageAt int64       `json:"stage_at"`
+	Holder  *taskHolder `json:"holder"`
+	Project string      `json:"project"`
+	Host    string      `json:"host"`
+	By      string      `json:"by"`
+	At      int64       `json:"at"`
 	Blocked *struct {
 		Reason string `json:"reason"`
 		By     string `json:"by"`
@@ -96,7 +101,11 @@ type taskRow struct {
 	Verify      *session.TaskVerify `json:"verify"`
 	Prompt      string              `json:"prompt"`
 	Attachments []taskAttachment    `json:"attachments"`
-	History     []struct {
+	// Touches, Repo and Overlaps are task_touches_command.go's.
+	Touches  []string      `json:"touches"`
+	Repo     string        `json:"repo"`
+	Overlaps []taskOverlap `json:"overlaps"`
+	History  []struct {
 		Action string `json:"action"`
 		By     string `json:"by"`
 		At     int64  `json:"at"`
@@ -106,20 +115,31 @@ type taskRow struct {
 	} `json:"history"`
 }
 
-// holderLabel is the pane that holds the card, as one plain word.
-func (r taskRow) holderLabel() string {
-	if r.Holder == nil {
+// taskHolder is the pane that holds a card.
+type taskHolder struct {
+	Window string `json:"window"`
+	Host   string `json:"host"`
+	Name   string `json:"name"`
+	State  string `json:"state"`
+}
+
+// label is the pane as one plain word, - for no pane.
+func (h *taskHolder) label() string {
+	if h == nil {
 		return "-"
 	}
-	label := shortWindowID(r.Holder.Window)
-	if r.Holder.Name != "" {
-		label = plainLine(r.Holder.Name)
+	label := shortWindowID(h.Window)
+	if h.Name != "" {
+		label = plainLine(h.Name)
 	}
-	if r.Holder.Host != "" {
-		label += " on " + plainLine(r.Holder.Host)
+	if h.Host != "" {
+		label += " on " + plainLine(h.Host)
 	}
 	return label
 }
+
+// holderLabel is the pane that holds the card, as one plain word.
+func (r taskRow) holderLabel() string { return r.Holder.label() }
 
 // byLabel shortens a pane's window id, as queue ls does.
 func byLabel(by string) string {
@@ -153,6 +173,9 @@ func callTask(f taskFlags, window, verb string, params map[string]any, describe 
 	}
 	raw, err := t.client.Call(verb, t.params(params))
 	if err != nil {
+		if stale := staleTouches(err); stale != nil {
+			return reportVerbError(stale, f.json)
+		}
 		return reportVerbError(t.explain(verb, err), f.json)
 	}
 	if f.json {
@@ -163,6 +186,10 @@ func callTask(f taskFlags, window, verb string, params map[string]any, describe 
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
 	fmt.Println(describe(row, t.on()))
+	_, named := params["touches"]
+	for _, note := range touchNotes(row, named) {
+		fmt.Fprintln(os.Stderr, note)
+	}
 	return nil
 }
 
@@ -215,10 +242,11 @@ func projectFlag(v string) (string, error) {
 // newTaskAddCommand builds `tuios task add`.
 func newTaskAddCommand() *cobra.Command {
 	var f taskFlags
-	var prompt, stage, project, harnessID, machine string
+	var prompt, stage, project, harnessID, machine, repo string
+	var touches []string
 	var askFirst bool
 	cmd := &cobra.Command{
-		Use:   "add [-p PROMPT] [--stage S] [--project URL] [--harness ID] [--machine M] [--ask-first] TITLE...",
+		Use:   "add [-p PROMPT] [--stage S] [--project URL] [--harness ID] [--machine M] [--ask-first] [--touches PATTERN]... TITLE...",
 		Short: "Add a task card",
 		Long: `Add a task card. The words are joined with spaces into its title. -p gives the
 prompt for the pane that takes it, at most 16 KiB; '-p -' reads it from
@@ -235,7 +263,12 @@ dispatch never gives it to an agent (tuios task dispatch).
 
 --machine says where the card's agent starts: any for the machine with the
 most room, this one or a linked one (place-agent), or one linked
-machine's name. Omit it for this machine.`,
+machine's name. Omit it for this machine.
+
+--touches names a path the card's work changes, from the root of the
+repository of the current folder, and may be given more than once. See
+'tuios task touches' for the patterns. --repo names another folder's
+repository.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if prompt == "-" {
@@ -268,6 +301,9 @@ machine's name. Omit it for this machine.`,
 			if machine != "" {
 				params["machine"] = machine
 			}
+			if err := touchParams(params, touches, repo); err != nil {
+				return err
+			}
 			return callTask(f, "", "add-task", params, func(r taskRow, on string) string {
 				return fmt.Sprintf("Added %s%s: %s", plainLine(r.ID), on, plainLine(r.Title))
 			})
@@ -280,6 +316,7 @@ machine's name. Omit it for this machine.`,
 	cmd.Flags().StringVar(&harnessID, "harness", "", "The agent the card is for, such as claude-code (default: any agent)")
 	cmd.Flags().BoolVar(&askFirst, "ask-first", false, "Keep the card for a person to start: dispatch never gives it to an agent")
 	cmd.Flags().StringVar(&machine, "machine", "", "Where the card's agent starts: any, or a linked machine's name (default: this machine)")
+	addTouchFlags(cmd, &touches, &repo, "A path the card's work changes, from the repository's root; give it once per path")
 	_ = cmd.RegisterFlagCompletionFunc("stage", cobra.FixedCompletions(session.TaskStages, cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }
@@ -484,6 +521,12 @@ func describeTask(r taskRow, on string) string {
 	if r.Attempts > 0 {
 		fmt.Fprintf(&b, "  attempts %d, last: %s\n", r.Attempts, plainLine(r.Note))
 	}
+	if len(r.Touches) > 0 {
+		fmt.Fprintf(&b, "  touches %s\n", plainLine(strings.Join(r.Touches, " ")))
+		if r.Repo != "" {
+			fmt.Fprintf(&b, "  repo    %s\n", plainLine(r.Repo))
+		}
+	}
 	if v := r.Verify; v != nil {
 		fmt.Fprintf(&b, "  verify  %s %s\n", plainLine(v.State), plainLine(v.Note))
 		if v.State == session.VerifyFailed && v.Tail != "" {
@@ -525,7 +568,11 @@ for that pane; outside one, name the pane with -w.
 
 The first line printed is the card's id and its title, separated by a space,
 so a script can read it: id=$(tuios task claim --next | cut -d' ' -f1). With
-nothing to take, it fails with no_task.`,
+nothing to take, it fails with no_task.
+
+A card whose touches overlap a card another pane holds is taken all the same,
+and a warning on standard error names that card, its holder and the paths.
+With --json the same cards are in overlaps.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			switch {
